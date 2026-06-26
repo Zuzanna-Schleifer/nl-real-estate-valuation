@@ -1,0 +1,81 @@
+version: 2
+
+models:
+  - name: stg_bag
+    description: "Standaryzowane adresy z BAG Kadaster"
+    columns:
+      - name: bag_id
+        description: "Unikalny ID obiektu BAG"
+        tests:
+          - not_null
+          - unique
+      - name: postcode
+        description: "Kod pocztowy (4 cyfry + 2 litery, bez spacji)"
+        tests:
+          - not_null
+      - name: postcode_4digit
+        description: "Pierwsze 4 cyfry kodu pocztowego"
+        tests:
+          - not_null
+      - name: gebruiksdoel
+        description: "Cel uzytkowania budynku"
+        tests:
+          - accepted_values:
+              values: ['wonen', 'kantoor', 'winkel', 'industrie', 'overig']
+
+  - name: stg_woz
+    description: "Oczyszczone wartosci WOZ"
+    columns:
+      - name: woz_waarde
+        description: "Wartosc WOZ w EUR"
+        tests:
+          - not_null
+      - name: postcode
+        tests:
+          - not_null
+
+  - name: stg_ep_online
+    description: "Etykiety energetyczne EP-online"
+    columns:
+      - name: energielabel
+        tests:
+          - accepted_values:
+              values: ['A+++', 'A++', 'A+', 'A', 'B', 'C', 'D', 'E', 'F', 'G']
+      - name: energielabel_score
+        tests:
+          - not_null
+
+  - name: stg_cbs
+    description: "Dane demograficzne CBS per wijk"
+    columns:
+      - name: wijk_code
+        tests:
+          - not_null
+
+  - name: int_properties_enriched
+    description: "Polaczone dane ze wszystkich zrodel"
+    columns:
+      - name: bag_id
+        tests:
+          - not_null
+          - unique
+
+  - name: mart_features
+    description: "Feature store dla modelu AVM - gotowy do treningu ML"
+    columns:
+      - name: bag_id
+        tests:
+          - not_null
+          - unique
+      - name: target_price
+        description: "Cena docelowa (WOZ waarde) w EUR"
+        tests:
+          - not_null
+      - name: oppervlakte_m2
+        description: "Powierzchnia m2 (po imputacji)"
+        tests:
+          - not_null
+      - name: energielabel_score
+        description: "Score energetyczny 1-10 (po imputacji)"
+        tests:
+          - not_null

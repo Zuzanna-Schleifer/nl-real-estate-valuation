@@ -1,0 +1,139 @@
+version: '3.8'
+
+# Wspolna konfiguracja dla serwisow Airflow
+x-airflow-common:
+  &airflow-common
+  image: apache/airflow:2.8.0
+  env_file:
+    - secrets.env
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+  volumes:
+    - ./src/pipeline/dags:/opt/airflow/dags
+    - ./src/pipeline/plugins:/opt/airflow/plugins
+    - ./logs:/opt/airflow/logs
+    - .:/opt/airflow/project
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+
+  # ----------------------------------------------------------
+  # PostgreSQL - tylko dla Airflow metadata (nie dla danych AVM)
+  # ----------------------------------------------------------
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  # ----------------------------------------------------------
+  # Airflow - inicjalizacja (uruchamia sie raz)
+  # ----------------------------------------------------------
+  airflow-init:
+    <<: *airflow-common
+    command: bash -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com"
+    restart: "no"
+
+  # ----------------------------------------------------------
+  # Airflow Webserver - UI na localhost:8080
+  # ----------------------------------------------------------
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      retries: 3
+    restart: unless-stopped
+
+  # ----------------------------------------------------------
+  # Airflow Scheduler - uruchamia DAGi
+  # ----------------------------------------------------------
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: unless-stopped
+
+  # ----------------------------------------------------------
+  # MLflow - tracking server na localhost:5000
+  # ----------------------------------------------------------
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.10.0
+    command: >
+      mlflow server
+        --host 0.0.0.0
+        --port 5000
+        --backend-store-uri sqlite:///mlflow/mlflow.db
+        --default-artifact-root /mlflow/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    restart: unless-stopped
+
+  # ----------------------------------------------------------
+  # Zookeeper - wymagany przez Kafka
+  # ----------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper
+    restart: unless-stopped
+
+  # ----------------------------------------------------------
+  # Kafka - message broker na localhost:9092
+  # ----------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_LOG_RETENTION_HOURS: 168
+    volumes:
+      - kafka_data:/var/lib/kafka
+    restart: unless-stopped
+
+  # ----------------------------------------------------------
+  # Redis - rate limiting dla FastAPI
+  # ----------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  mlflow_data:
+  zookeeper_data:
+  kafka_data:
+  redis_data:

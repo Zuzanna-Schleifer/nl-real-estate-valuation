@@ -1,0 +1,36 @@
+name: 'avm_dbt'
+version: '1.0.0'
+config-version: 2
+
+profile: 'avm_dbt'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  avm_dbt:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: table
+      +schema: staging
+    mart:
+      +materialized: table
+      +schema: mart
+
+vars:
+  gemeente: 'rotterdam'
+  min_woz_waarde: 50000
+  max_woz_waarde: 10000000
+  min_oppervlakte: 15
+  max_oppervlakte: 500

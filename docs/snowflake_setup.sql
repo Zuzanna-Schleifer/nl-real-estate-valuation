@@ -1,0 +1,47 @@
+-- ============================================================
+-- SNOWFLAKE SETUP - wklej i wykonaj w Snowsight (Web UI)
+-- Snowsight: app.snowflake.com -> twoje konto -> Worksheets
+-- ============================================================
+
+-- 1. Baza danych i schematy
+CREATE DATABASE IF NOT EXISTS AVM_DB;
+CREATE SCHEMA IF NOT EXISTS AVM_DB.RAW;
+CREATE SCHEMA IF NOT EXISTS AVM_DB.STAGING;
+CREATE SCHEMA IF NOT EXISTS AVM_DB.MART;
+
+-- 2. Compute warehouse (XS wystarczy - auto-suspend po 60s)
+CREATE WAREHOUSE IF NOT EXISTS AVM_WH
+  WAREHOUSE_SIZE = 'X-SMALL'
+  AUTO_SUSPEND = 60
+  AUTO_RESUME = TRUE
+  INITIALLY_SUSPENDED = TRUE;
+
+-- 3. Role i user dla aplikacji
+CREATE ROLE IF NOT EXISTS AVM_ROLE;
+
+GRANT USAGE ON WAREHOUSE AVM_WH TO ROLE AVM_ROLE;
+GRANT ALL PRIVILEGES ON DATABASE AVM_DB TO ROLE AVM_ROLE;
+GRANT ALL PRIVILEGES ON ALL SCHEMAS IN DATABASE AVM_DB TO ROLE AVM_ROLE;
+GRANT ALL PRIVILEGES ON FUTURE SCHEMAS IN DATABASE AVM_DB TO ROLE AVM_ROLE;
+GRANT ALL PRIVILEGES ON FUTURE TABLES IN DATABASE AVM_DB TO ROLE AVM_ROLE;
+
+-- 4. User aplikacji (zmien haslo!)
+CREATE USER IF NOT EXISTS avm_user
+  PASSWORD = 'TwojeSilneHaslo2024!'
+  DEFAULT_ROLE = AVM_ROLE
+  DEFAULT_WAREHOUSE = AVM_WH
+  DEFAULT_NAMESPACE = AVM_DB.RAW;
+
+GRANT ROLE AVM_ROLE TO USER avm_user;
+
+-- 5. Weryfikacja
+SHOW DATABASES LIKE 'AVM_DB';
+SHOW SCHEMAS IN DATABASE AVM_DB;
+SHOW WAREHOUSES LIKE 'AVM_WH';
+
+-- Zapisz te dane do secrets.env:
+-- SNOWFLAKE_ACCOUNT = (Admin -> Account -> kliknij "Copy account identifier")
+-- SNOWFLAKE_USER = avm_user
+-- SNOWFLAKE_PASSWORD = TwojeSilneHaslo2024!
+-- SNOWFLAKE_DATABASE = AVM_DB
+-- SNOWFLAKE_WAREHOUSE = AVM_WH

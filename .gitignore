@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+venv/
+.venv/
+
+# Data
+data/
+*.csv
+*.parquet
+*.json.gz
+
+# Node
+node_modules/
+.next/
+dist/
+build/
+
+# Docker
+.docker/
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Credentials - NIGDY nie commituj
+secrets.env
+.aws/
+snowflake_credentials.json
+
+# MLflow
+mlruns/
+mlartifacts/
+shap_explainer.pkl
+
+# Airflow
+airflow.db
+airflow.cfg
+logs/
+
+# dbt
+dbt/avm_dbt/target/
+dbt/avm_dbt/dbt_packages/

@@ -1,0 +1,42 @@
+version: 2
+
+sources:
+  - name: raw
+    database: AVM_DB
+    schema: RAW
+    description: "Surowe dane zaladowane z S3 przez COPY INTO"
+
+    tables:
+      - name: bag_adressen
+        description: "Adresy i wlasciwosci budynkow z BAG Kadaster"
+        columns:
+          - name: bag_id
+            description: "Unikalny identyfikator obiektu BAG"
+          - name: postcode
+            description: "Kod pocztowy NL (format: 4 cyfry + 2 litery)"
+          - name: oppervlakte
+            description: "Powierzchnia uzytkoawa w m2"
+          - name: bouwjaar
+            description: "Rok budowy"
+
+      - name: woz_waarden
+        description: "Oficjalne wartosci podatkowe WOZ"
+        columns:
+          - name: woz_waarde
+            description: "Wartosc WOZ w EUR (proxy ceny rynkowej)"
+          - name: peildatum
+            description: "Data pomiaru (01-01 danego roku)"
+
+      - name: ep_online_labels
+        description: "Etykiety energetyczne z EP-online"
+        columns:
+          - name: energielabel
+            description: "Klasa energetyczna A+++ do G"
+
+      - name: cbs_wijk_data
+        description: "Dane demograficzne per dzielnica (CBS Statline)"
+        columns:
+          - name: wijk_code
+            description: "Kod dzielnicy CBS (format: WK000000)"
+          - name: gemiddeld_inkomen
+            description: "Sredni dochod per inwoner w EUR"
