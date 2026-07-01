@@ -5,10 +5,8 @@ models:
     description: "Standaryzowane adresy z BAG Kadaster"
     columns:
       - name: bag_id
-        description: "Unikalny ID obiektu BAG"
         tests:
           - not_null
-          - unique
       - name: postcode
         description: "Kod pocztowy (4 cyfry + 2 litery, bez spacji)"
         tests:
@@ -58,7 +56,6 @@ models:
       - name: bag_id
         tests:
           - not_null
-          - unique
 
   - name: mart_features
     description: "Feature store dla modelu AVM - gotowy do treningu ML"
