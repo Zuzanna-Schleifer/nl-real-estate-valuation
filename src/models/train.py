@@ -33,28 +33,14 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 EXPERIMENT_NAME = "dutch_avm_xgboost"
 
 FEATURE_COLS = [
-    # Budynek
     "oppervlakte_m2",
     "oppervlakte_log",
     "energielabel_score",
-    "leeftijd_jaar",
     "is_wonen",
-    "is_kantoor",
+    "is_kantoor", 
     "is_winkel",
-    # Wijk
-    "wijk_gemiddeld_inkomen",
-    "wijk_gemiddelde_waarde",
-    "wijk_pct_eigenaar",
-    "wijk_bevolkingsdichtheid",
-    # Postcode
     "postcode_4digit_encoded",
     "n_properties_in_postcode",
-    "median_woz_in_postcode",
-    # Spatial (jesli dostepne)
-    "dist_centrum_m",
-    "dist_station_m",
-    "n_shops_500m",
-    "n_schools_1km",
 ]
 
 TARGET = "target_price_log"
@@ -70,7 +56,7 @@ def load_data() -> pd.DataFrame:
         password=os.getenv("SNOWFLAKE_PASSWORD"),
         database="AVM_DB",
         warehouse="AVM_WH",
-        schema="MART",
+        schema="STAGING_MART",
     )
 
     df = pd.read_sql("""
@@ -96,21 +82,51 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     postcode_freq = df["postcode_4digit"].value_counts().to_dict()
     df["postcode_4digit_encoded"] = df["postcode_4digit"].map(postcode_freq).fillna(0)
 
-    # Uzupelnienie spatial features (mediana jesli brakuje z PySpark job)
-    spatial_cols = ["dist_centrum_m", "dist_station_m", "n_shops_500m", "n_schools_1km"]
-    for col in spatial_cols:
-        if col in df.columns and df[col].isna().any():
-            median_val = df[col].median()
-            df[col] = df[col].fillna(median_val if pd.notna(median_val) else 0)
-        elif col not in df.columns:
-            # Kolumna nie istnieje - dodaj z wartoscia domyslna
-            defaults = {
-                "dist_centrum_m": 2500.0,
-                "dist_station_m": 800.0,
-                "n_shops_500m": 10,
-                "n_schools_1km": 3,
-            }
-            df[col] = defaults[col]
+    # Uzupelnienie spatial features
+    spatial_defaults = {
+        "dist_centrum_m": 2500.0,
+        "dist_station_m": 800.0,
+        "n_shops_500m": 10,
+        "n_schools_1km": 3,
+    }
+    for col, default in spatial_defaults.items():
+        if col in df.columns:
+            df[col] = df[col].fillna(default)
+        else:
+            df[col] = default
+
+    # Uzupelnienie wijk features
+    wijk_defaults = {
+        "wijk_gemiddeld_inkomen": 35000.0,
+        "wijk_gemiddelde_waarde": 350000.0,
+        "wijk_pct_eigenaar": 45.0,
+        "wijk_bevolkingsdichtheid": 3500.0,
+    }
+    for col, default in wijk_defaults.items():
+        if col in df.columns:
+            df[col] = df[col].fillna(default)
+        else:
+            df[col] = default
+
+    # Log oppervlakte
+    if "oppervlakte_log" not in df.columns:
+        df["oppervlakte_log"] = np.log(df["oppervlakte_m2"].clip(lower=1))
+
+    # One-hot encoding gebruiksdoel
+    if "gebruiksdoel" in df.columns:
+        df["is_wonen"] = (df["gebruiksdoel"] == "wonen").astype(int)
+        df["is_kantoor"] = (df["gebruiksdoel"] == "kantoor").astype(int)
+        df["is_winkel"] = (df["gebruiksdoel"] == "winkel").astype(int)
+    else:
+        df["is_wonen"] = 1
+        df["is_kantoor"] = 0
+        df["is_winkel"] = 0
+
+    # n_properties_in_postcode
+    if "n_properties_in_postcode" not in df.columns:
+        df["n_properties_in_postcode"] = 100
+
+    return df
 
     # Uzupelnienie wijk features
     wijk_cols = ["wijk_gemiddeld_inkomen", "wijk_gemiddelde_waarde",
@@ -250,7 +266,7 @@ def compute_shap(model, X_train_sample, X_test_sample, feature_names: list) -> d
     """Oblicza SHAP values i tworzy ranking cech."""
     print("\nObliczam SHAP values...")
 
-    explainer = shap.TreeExplainer(model)
+    explainer = shap.TreeExplainer(model, feature_perturbation="interventional")
     shap_vals = explainer.shap_values(X_test_sample)
 
     # Feature importance (mean |SHAP|)
@@ -324,26 +340,49 @@ def run_training():
         metrics = evaluate(model, X_test, y_test)
         mlflow.log_metrics(metrics)
 
-        # 6. SHAP
-        shap_results = compute_shap(
-            model,
-            X_train.sample(min(500, len(X_train)), random_state=42),
-            X_test.sample(min(200, len(X_test)), random_state=42),
-            features,
-        )
+        # 6. Feature importance
+        print("Obliczam feature importance...")
+        importance = pd.DataFrame({
+            "feature": features,
+            "importance": model.feature_importances_,
+        }).sort_values("importance", ascending=False)
+
+        print("\n=== Top Feature Importance ===")
+        print(importance.head(8).to_string(index=False))
 
         mlflow.log_dict(
-            {"feature_importance": shap_results["feature_importance"]},
-            "artifacts/shap_importance.json"
+            {"feature_importance": importance.to_dict(orient="records")},
+            "artifacts/feature_importance.json"
         )
+
+        # 7. Zapisz model
+        import pickle
+        model_path = "xgboost_model.pkl"
+        with open(model_path, "wb") as f:
+            pickle.dump(model, f)
+        mlflow.log_artifact(model_path)
+        print(f"✓ Model zapisany: {model_path}")
+
+        # 8. Zapisz feature list
+        mlflow.log_dict({"features": features}, "artifacts/feature_list.json")
+
+        print(f"\n{'='*50}")
+        print(f"✓ Training zakończony!")
+        print(f"  Run ID: {run_id}")
+        print(f"  MLflow: http://localhost:5000/#/experiments")
+        print(f"\nWklej do secrets.env:")
+        print(f"  MLFLOW_MODEL_RUN_ID={run_id}")
+        print(f"{'='*50}")
+
+        return model, None, metrics, run_id
 
         # 7. Zapisz model
         mlflow.xgboost.log_model(model, "xgboost_model")
 
         # 8. Zapisz explainer (dla API)
         explainer_path = "shap_explainer.pkl"
-        with open(explainer_path, "wb") as f:
-            pickle.dump(shap_results["explainer"], f)
+        # Explainer pominienty - XGBoost 3.x / SHAP kompatybilnosc
+        print("Explainer pominiety")
         mlflow.log_artifact(explainer_path)
 
         # 9. Zapisz feature list (dla API)

@@ -67,16 +67,15 @@ with open("data/cbs_data.jsonl", "w") as f:
         f.write(json.dumps(r) + "\n")
 print(f"CBS: {len(records)} wijken zapisanych")
 
-# WOZ - te same postcodes co BAG
+# WOZ - te same postcodes co BAG (jeden WOZ per BAG rekord)
 woz_records = []
-for i in range(500):
-    postcode = random.choice(postcodes)
-    area = random.randint(40, 250)
+for i, bag_r in enumerate(records):  # records = lista BAG rekordow
+    area = bag_r["oppervlakte"]
     woz_records.append({
         "woz_object_nummer": f"WOZ{i:08d}",
-        "postcode": postcode,
-        "huisnummer": random.randint(1, 200),
-        "woz_waarde": area * random.randint(3000, 6000),
+        "postcode": bag_r["postcode"],
+        "huisnummer": bag_r["huisnummer"],
+        "woz_waarde": int(area * random.randint(3000, 6000)),
         "peildatum": "2023-01-01",
         "gebruikscode": "1000",
         "is_synthetic": True,
