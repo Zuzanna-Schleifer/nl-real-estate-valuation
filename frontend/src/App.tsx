@@ -1,7 +1,3 @@
-// TYDZIEN 7
-// frontend/src/App.tsx
-// Glowny komponent aplikacji Dutch AVM
-
 import React, { useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -11,10 +7,6 @@ import {
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 const API_KEY = process.env.REACT_APP_API_KEY || 'demo_test_key';
 
-// ==================================================
-// TYPY
-// ==================================================
-
 interface ValuationRequest {
   postcode: string;
   huisnummer: number;
@@ -22,12 +14,6 @@ interface ValuationRequest {
   gebruiksdoel: string;
   energielabel: string;
   bouwjaar?: number;
-}
-
-interface SHAPFactor {
-  feature: string;
-  impact_eur: number;
-  direction: string;
 }
 
 interface ComparableProperty {
@@ -43,29 +29,25 @@ interface ValuationResult {
   confidence_low: number;
   confidence_high: number;
   price_per_m2: number;
-  top_factors: SHAPFactor[];
+  top_factors: Array<{
+    feature: string;
+    importance: number;
+    direction: string;
+  }>;
   comparable_properties: ComparableProperty[];
   model_version: string;
   plan: string;
   timestamp: string;
 }
 
-// ==================================================
-// HELPERS
-// ==================================================
-
 const formatEUR = (amount: number): string =>
-  new Intl.NumberFormat('nl-NL', {
+  new Intl.NumberFormat('en-NL', {
     style: 'currency',
     currency: 'EUR',
     maximumFractionDigits: 0,
   }).format(amount);
 
-const ENERGIELABELS = ['A+++', 'A++', 'A+', 'A', 'B', 'C', 'D', 'E', 'F', 'G'];
-
-// ==================================================
-// COMPONENTS
-// ==================================================
+const ENERGYLABELS = ['A+++', 'A++', 'A+', 'A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
 const StatCard: React.FC<{ label: string; value: string; sub?: string }> = ({ label, value, sub }) => (
   <div style={{
@@ -81,30 +63,26 @@ const StatCard: React.FC<{ label: string; value: string; sub?: string }> = ({ la
   </div>
 );
 
-const SHAPChart: React.FC<{ factors: SHAPFactor[] }> = ({ factors }) => {
+const FactorsChart: React.FC<{ factors: ValuationResult['top_factors'] }> = ({ factors }) => {
   const data = factors.map(f => ({
-    name: f.feature,
-    impact: Math.abs(f.impact_eur),
-    direction: f.direction,
+    name: f.feature.replace(/_/g, ' '),
+    value: Math.round(f.importance * 100),
   }));
 
   return (
     <div style={{ marginTop: 24 }}>
       <h3 style={{ fontSize: 14, fontWeight: 500, color: '#333', marginBottom: 12 }}>
-        Belangrijkste factoren
+        Key factors
       </h3>
       <ResponsiveContainer width="100%" height={180}>
         <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-          <XAxis type="number" tickFormatter={v => `€${(v/1000).toFixed(0)}k`} style={{ fontSize: 11 }} />
-          <YAxis type="category" dataKey="name" width={150} style={{ fontSize: 11 }} />
-          <Tooltip formatter={(v: number) => formatEUR(v)} />
-          <Bar dataKey="impact" radius={[0, 4, 4, 0]}>
-            {data.map((entry, i) => (
-              <Cell
-                key={i}
-                fill={entry.direction === 'positive' ? '#1D9E75' : '#D85A30'}
-              />
+          <XAxis type="number" tickFormatter={v => `${v}%`} style={{ fontSize: 11 }} />
+          <YAxis type="category" dataKey="name" width={160} style={{ fontSize: 11 }} />
+          <Tooltip formatter={(v: number) => `${v}%`} />
+          <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+            {data.map((_, i) => (
+              <Cell key={i} fill="#1D9E75" />
             ))}
           </Bar>
         </BarChart>
@@ -132,10 +110,6 @@ const ComparableCard: React.FC<{ prop: ComparableProperty }> = ({ prop }) => (
     </div>
   </div>
 );
-
-// ==================================================
-// MAIN APP
-// ==================================================
 
 const App: React.FC = () => {
   const [form, setForm] = useState<ValuationRequest>({
@@ -174,9 +148,8 @@ const App: React.FC = () => {
 
       const data: ValuationResult = await response.json();
       setResult(data);
-
     } catch (err: any) {
-      setError(err.message || 'Er is een fout opgetreden');
+      setError(err.message || 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -226,7 +199,7 @@ const App: React.FC = () => {
           marginBottom: 24,
         }}>
           <h2 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 20px', color: '#1a1a2e' }}>
-            Woning taxeren
+            Property Valuation
           </h2>
 
           <form onSubmit={handleSubmit}>
@@ -244,7 +217,7 @@ const App: React.FC = () => {
               </div>
 
               <div>
-                <label style={labelStyle}>Huisnummer</label>
+                <label style={labelStyle}>House number</label>
                 <input
                   style={inputStyle}
                   type="number"
@@ -256,7 +229,7 @@ const App: React.FC = () => {
               </div>
 
               <div>
-                <label style={labelStyle}>Oppervlakte (m²)</label>
+                <label style={labelStyle}>Floor area (m²)</label>
                 <input
                   style={inputStyle}
                   type="number"
@@ -269,33 +242,33 @@ const App: React.FC = () => {
               </div>
 
               <div>
-                <label style={labelStyle}>Energielabel</label>
+                <label style={labelStyle}>Energy label</label>
                 <select
                   style={inputStyle}
                   value={form.energielabel}
                   onChange={e => setForm({ ...form, energielabel: e.target.value })}
                 >
-                  {ENERGIELABELS.map(l => (
+                  {ENERGYLABELS.map(l => (
                     <option key={l} value={l}>{l}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label style={labelStyle}>Gebruiksdoel</label>
+                <label style={labelStyle}>Property type</label>
                 <select
                   style={inputStyle}
                   value={form.gebruiksdoel}
                   onChange={e => setForm({ ...form, gebruiksdoel: e.target.value })}
                 >
-                  <option value="wonen">Wonen</option>
-                  <option value="kantoor">Kantoor</option>
-                  <option value="winkel">Winkel</option>
+                  <option value="wonen">Residential</option>
+                  <option value="kantoor">Office</option>
+                  <option value="winkel">Retail</option>
                 </select>
               </div>
 
               <div>
-                <label style={labelStyle}>Bouwjaar</label>
+                <label style={labelStyle}>Year built</label>
                 <input
                   style={inputStyle}
                   type="number"
@@ -324,7 +297,7 @@ const App: React.FC = () => {
                 transition: 'background 0.2s',
               }}
             >
-              {loading ? 'Berekenen...' : 'Waarde berekenen →'}
+              {loading ? 'Calculating...' : 'Calculate value →'}
             </button>
           </form>
         </div>
@@ -355,12 +328,12 @@ const App: React.FC = () => {
 
             {/* Main price */}
             <div style={{ textAlign: 'center', marginBottom: 24, paddingBottom: 24, borderBottom: '0.5px solid #f0f0f0' }}>
-              <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>Geschatte waarde</div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>Estimated value</div>
               <div style={{ fontSize: 48, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.1 }}>
                 {formatEUR(result.estimated_value)}
               </div>
               <div style={{ fontSize: 13, color: '#888', marginTop: 8 }}>
-                80% betrouwbaarheidsinterval:&nbsp;
+                80% confidence interval:&nbsp;
                 <strong>{formatEUR(result.confidence_low)}</strong>
                 &nbsp;–&nbsp;
                 <strong>{formatEUR(result.confidence_high)}</strong>
@@ -370,7 +343,7 @@ const App: React.FC = () => {
             {/* Stats */}
             <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
               <StatCard
-                label="Prijs per m²"
+                label="Price per m²"
                 value={formatEUR(result.price_per_m2)}
                 sub={`${form.oppervlakte_m2} m²`}
               />
@@ -380,22 +353,22 @@ const App: React.FC = () => {
                 sub={result.plan + ' plan'}
               />
               <StatCard
-                label="Bandbreedte"
+                label="Confidence range"
                 value={`±12%`}
                 sub="80% CI"
               />
             </div>
 
-            {/* SHAP chart */}
+            {/* Factors chart */}
             {result.top_factors.length > 0 && (
-              <SHAPChart factors={result.top_factors} />
+              <FactorsChart factors={result.top_factors} />
             )}
 
             {/* Comparables */}
             {result.comparable_properties.length > 0 && (
               <div style={{ marginTop: 24 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 500, color: '#333', marginBottom: 12 }}>
-                  Vergelijkbare woningen
+                  Comparable properties
                 </h3>
                 <div style={{ display: 'flex', gap: 12 }}>
                   {result.comparable_properties.map((p, i) => (
@@ -407,7 +380,7 @@ const App: React.FC = () => {
 
             {/* Footer */}
             <div style={{ marginTop: 20, fontSize: 11, color: '#bbb', textAlign: 'right' }}>
-              {new Date(result.timestamp).toLocaleString('nl-NL')}
+              {new Date(result.timestamp).toLocaleString('en-GB')}
             </div>
           </div>
         )}
