@@ -75,5 +75,17 @@ if cbs_files:
 else:
     print("Brak plikow CBS w data/")
 
+# WOZ
+woz_files = [f for f in os.listdir(data_dir) if f.startswith("woz_")]
+if woz_files:
+    records = load_jsonl(os.path.join(data_dir, woz_files[0]))
+    for r in records[:500]:
+        cursor.execute(
+            "INSERT INTO AVM_DB.RAW.WOZ_WAARDEN (postcode, huisnummer, woz_waarde, peildatum, is_synthetic) VALUES (%s, %s, %s, %s, %s)",
+            (r.get("postcode",""), r.get("huisnummer",1), r.get("woz_waarde",0), r.get("peildatum",""), True)
+        )
+    conn.commit()
+    print(f"WOZ: {min(500, len(records))} rekordow zaladowanych")
+    
 conn.close()
 print("Gotowe!")

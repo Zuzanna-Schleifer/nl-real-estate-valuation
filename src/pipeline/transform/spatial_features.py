@@ -181,7 +181,7 @@ def update_snowflake_spatial(df_spatial: pd.DataFrame):
         password=os.getenv("SNOWFLAKE_PASSWORD"),
         database="AVM_DB",
         warehouse="AVM_WH",
-        schema="MART",
+        schema="STAGING_MART",
     )
 
     cursor = conn.cursor()
@@ -204,7 +204,7 @@ def update_snowflake_spatial(df_spatial: pd.DataFrame):
     for col_name, col_type in new_cols:
         try:
             cursor.execute(
-                f"ALTER TABLE AVM_DB.MART.MART_FEATURES ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
+                f"ALTER TABLE AVM_DB.STAGING_MART.MART_FEATURES ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
             )
         except Exception:
             pass
@@ -218,7 +218,7 @@ def update_snowflake_spatial(df_spatial: pd.DataFrame):
 
         for _, row in batch.iterrows():
             cursor.execute("""
-                UPDATE AVM_DB.MART.MART_FEATURES
+                UPDATE AVM_DB.STAGING_MART.MART_FEATURES
                 SET
                     lat = %s,
                     lon = %s,
@@ -255,33 +255,40 @@ def update_snowflake_spatial(df_spatial: pd.DataFrame):
 
 
 def run_spatial_features_job(city: str = "Rotterdam, Netherlands", limit: int = 10000):
-    """Glowna funkcja - uruchamiana przez Airflow lub recznie."""
-    print("\n=== PySpark Spatial Features Job ===")
+    """Glowna funkcja - bez PySpark, uzywa pandas bezposrednio."""
+    print("\n=== Spatial Features Job (GeoPandas + OSMnx) ===")
 
-    spark = create_spark_session()
-    spark.sparkContext.setLogLevel("WARN")
-
-    # 1. Pobierz dane z Snowflake
+    # Pobierz dane z Snowflake
     conn = snowflake.connector.connect(
         account=os.getenv("SNOWFLAKE_ACCOUNT"),
         user=os.getenv("SNOWFLAKE_USER"),
         password=os.getenv("SNOWFLAKE_PASSWORD"),
         database="AVM_DB",
         warehouse="AVM_WH",
-        schema="MART",
+        schema="STAGING_MART",
+        role="AVM_ROLE"
     )
 
-    df_pd = pd.read_sql(
-        f"SELECT bag_id, postcode, stad FROM MART_FEATURES LIMIT {limit}",
-        conn
-    )
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT bag_id, postcode FROM MART_FEATURES LIMIT {limit}")
+    rows = cursor.fetchall()
     conn.close()
 
+    df_pd = pd.DataFrame(rows, columns=["bag_id", "postcode"])
     print(f"Zaladowano {len(df_pd)} rekordow")
 
-    # 2. Konwertuj na Spark
-    df_spark = spark.createDataFrame(df_pd)
-    print(f"Spark DataFrame: {df_spark.count()} rekordow, {len(df_spark.columns)} kolumn")
+    # Pobierz POI z OSM
+    pois = download_osm_pois(city)
+
+    # Oblicz spatial features
+    print("Obliczam spatial features...")
+    df_spatial = compute_spatial_batch(df_pd, pois)
+    print(f"Obliczono features dla {len(df_spatial)} rekordow")
+
+    # Aktualizuj Snowflake
+    update_snowflake_spatial(df_spatial)
+
+    print("\n✓ Spatial job zakończony")
 
     # 3. Pobierz POI z OSM
     pois = download_osm_pois(city)
@@ -294,7 +301,6 @@ def run_spatial_features_job(city: str = "Rotterdam, Netherlands", limit: int = 
     # 5. Aktualizuj Snowflake
     update_snowflake_spatial(df_spatial)
 
-    spark.stop()
     print("\n✓ PySpark Spatial job zakończony")
 
 
