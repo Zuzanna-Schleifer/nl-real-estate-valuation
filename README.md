@@ -179,16 +179,6 @@ Odpowiedz:
 pytest tests/ -v
 ```
 
-## Entrepreneurship
-
-**Ceny:**
-- Free: 10 wycen/mies. · €0
-- Pro: 500 wycen/mies. · €49
-- Enterprise: unlimited · €299
-
-**TAM:** Holenderskie agencje nieruchomości, asset managerzy, banki
-**Traction:** [uzupelnij po launchu]
-
 ## Autor
 
 Zuzanna Schleifer · TU Delft · MSc Big Data + MSc Architecture
